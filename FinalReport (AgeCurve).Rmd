@@ -1,0 +1,290 @@
+---
+title: "Disc Golf Aging Curves Final Project"
+author: Lincoln Stewart
+date: \today
+fontsize: 12pt
+geometry: margin=0.85in
+output: pdf_document
+header-includes:
+- \usepackage{setspace}\onehalfspacing
+---
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(knitr)
+library(dplyr)
+mean_SS_t_mod <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/quad_sum_mod")
+mean_SS_t <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/spline_sum_mod")
+
+mean_SS_t <- mean_SS_t %>%
+  select(-X) %>%
+  rename(DF_Used = NA.)
+  
+mean_SS_t_mod <- mean_SS_t_mod %>%
+  select(-X)
+
+clustdm_cv <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clustdm_cv")
+
+clustdm <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clustdm")
+
+
+MPO_ar_pt <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/MPO_ar_pt")
+clss <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clss.csv")
+clss_sc <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clss_sc.csv")
+clss_hc <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clss_hc.csv")
+clss_kmeans <- read.csv("C:/Users/lincs/OneDrive/Documents/Independent Study/github/Disc-Golf-Aging-Curves2/clss_kmeans.csv")
+
+```
+
+# Overview and Description of Data
+
+The goal of this independent study has been to figure out whether or not it is more effective to predict players skill level using generic aging curves across all athletes or to have position specific ones. The sport in which we used for our research was disc golf. The data that we would use was from the PDGA website that would include things like players' ratings, names and ages, and their stats from when they have competed. Using a combination of all this different data is how the research was conducted. 
+
+
+# Method of determinig player type
+
+Since one of the biggest determiners of this study was the way players were grouped and therefore assigned player types. This was achieved through multiple methods of clustering. The kind that were was hierarchical, GMM, spectral, and k-means. Each different clustering method used different methods of clustering, and would look at 2 clusters through 6 for each method for each kind of clustering. This gave us a total of 65 different ways in which the players were grouped. 
+
+# Description of model making
+
+After grouping the players into different types with the use of different clustering methods, it was then time to predict whether or not the player type model was more effective or the non player type. The model was then split into two different ones, one for player type and one for a regular generic one. The models fitted are as follows. 
+
+$outp<-lm(pt_ratr~pt_type*pt_ages+pt_type*I(pt_ages^2),data=MPO_ar_pt_train2)$
+
+$out<-lm(ratr~ages+I(ages^2),data=MPO_ar_pt_train)$
+
+The first being the player type model, the second being the generic model. From there, different loops were run through with multiple different iterations. The parameters that were used to then measure the fit and effectiveness of the model was adjusted $R^2$, sum squared error, and mean squared error. This was all put into a table titled mean_SS_t for spline model and mean_SS_t_mod for the quadratic model. 
+
+# Results 
+
+## Quadratic model 
+
+The use of the quadratic model was the original vision for the the project. This was the most general use to explore the effect of aging curves for player type and non player type models. The model that wads fitted for the player type is as follows 
+
+$outp<-lm(pt_ratr~pt_type*pt_ages+pt_type*I(pt_ages^2),data=MPO_ar_pt_train2)$
+
+and the non player type 
+
+$out<-lm(ratr~ages+I(ages^2),data=MPO_ar_pt_train)$
+
+
+## Visualizations 
+
+```{r}
+# Best player type
+names(MPO_ar_pt)[which.min(mean_SS_t_mod$Mean_MSE_PlayerType) + 12]
+best_order <- names(MPO_ar_pt)[order(mean_SS_t_mod$Mean_MSE_PlayerType) + 12]
+
+mean_SS_t_mod[order(mean_SS_t_mod$Mean_MSE_PlayerType), ]
+```
+
+```{r, tab.cap = "Table showing best clustering types"}
+## table of best clustering types 
+tab_best_order <- data.frame(
+  Best_cluster_types = c(best_order[1:6])
+)
+
+kable(tab_best_order)
+```
+
+```{r, fig.cap= "Bar plot of showing spread of player data across different clusters"}
+# Visualizing results
+pp <- apply(clustdm_cv[, c(2, 3, 5, 6)], 2, function(x) tapply(x, clustdm_cv$X3_anovadot, mean, na.rm = TRUE))
+barplot(t(pp), beside = TRUE, ylab = "Standardized Statistic (C1,C2, C1P, C2P)", xlab = "Player Type")
+```
+
+```{r, fig.cap= "Different polynomials from the clusters"}
+# Final polynomial-based visualization for sanity check
+out <- lm(ratr ~ -1 + factor(X3_anovadot) + factor(X3_anovadot) / ages + factor(X3_anovadot) / I(ages^2), 
+          data = MPO_ar_pt)
+summary(out)
+
+ages_plot <- seq(-1, 1, 0.1)
+
+rat_pred1 <- coef(out)[1] + coef(out)[4] * ages_plot + coef(out)[7] * ages_plot^2
+rat_pred2 <- coef(out)[2] + coef(out)[5] * ages_plot + coef(out)[8] * ages_plot^2
+rat_pred3 <- coef(out)[3] + coef(out)[6] * ages_plot + coef(out)[9] * ages_plot^2
+
+ages_plot2 <- ages_plot * sd(MPO_ar_pt$Age) + mean(MPO_ar_pt$Age)
+
+plot(rat_pred2 ~ ages_plot2, type = "l", ylim = c(min(rat_pred3), max(rat_pred1)), lwd = 2)
+points(rat_pred1 ~ ages_plot2, type = "l", col = "blue", lwd = 2)
+points(rat_pred3 ~ ages_plot2, type = "l", col = "red", lwd = 2)
+```
+
+These are a couple visualizations of of scatter plots of all the players.
+
+```{r, fig.cap= "SCatter plot of all players and their ratings"}
+## scatter plot with different color points to show 
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr)) +
+  geom_point(alpha = 0.3) +
+  labs(title = "All Players' Ratings by Age",
+       x = "Age", y = "Player Rating") +
+  theme_minimal()
+```
+
+```{r, fig.cap= "Scatter plot seperated by cluster type, seperated by color"}
+# with color
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr, color = as.factor(`X3_anovadot`))) +
+  geom_point(alpha = 0.4) +
+  labs(title = "Ratings by Age and Player Type",
+       x = "Age", y = "Player Rating", color = "Player Type") +
+  theme_minimal()
+``` 
+
+```{r, fig.cap= "The cluster types shown as seperate graphs"}
+# using facet wrap 
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr, color = as.factor(`X3_anovadot`))) +
+  geom_point(alpha = 0.4) + 
+  facet_wrap(~`X3_anovadot`) +
+  labs(title = "Ratings by Age and Player Type",
+       x = "Age", y = "Player Rating", color = "Player Type") +
+  theme_minimal()
+```
+
+This is a representation of all the different clustering methods used and their effectiveness. 
+
+```{r, warning=FALSE, fig.cap= "Bar plot of all clustering types and their RSME"}
+#performance by cluster on bar plots (MSE measure) 
+mean_SS_t_mod$Cluster <- colnames(cbind(clss, clss_sc, clss_hc, clss_kmeans))
+ggplot(mean_SS_t_mod, aes(x = reorder(Cluster, Mean_MSE_PlayerType), y = Mean_MSE_PlayerType)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "RMSE of Player-Type Models by Clustering Method",
+       x = "Clustering Variable", y = "RMSE (Player-Type)") +
+  theme_minimal()
+```
+
+
+## Spline 
+
+The use of splines were included based off the fact that sometimes quadratic models sometimes over simplify the relationship between the ages and the ratings of the players. Spline regression gives more flexibility by enabling the model to capture more complexity and non linear trends in the data. It is also useful for when the effect of age on performance isn't constant across all different age ranges. The spline model for player type is as follows 
+
+$outp <- lm(pt_ratr ~ pt_type * bs(pt_ages, degree = 3, df = df_try), data = MPO_ar_pt_train2)$
+
+and the non player type 
+
+$out <- lm(ratr ~ bs(ages, degree = 3, df = df_try), data = MPO_ar_pt_train)$
+
+Something that differed from the quadratic model is the "DF_Used" on the last column. Each spline was fitted from 3:8 knots and then the best one was determined that yielded the best measurements of the model, like MSE, SSE, ect. The results are then all stored in a table. 
+
+
+## Visualizations 
+
+The following visualizations are calculating and showing what clustering method was the best performance wise. 
+```{r}
+# Best player type
+names(MPO_ar_pt)[which.min(mean_SS_t$Mean_MSE_PlayerType) + 12]
+best_order <- names(MPO_ar_pt)[order(mean_SS_t$Mean_MSE_PlayerType) + 12]
+
+mean_SS_t[order(mean_SS_t$Mean_MSE_PlayerType), ]
+```
+
+```{r, tab.cap= "Table of top 6 best clusterting methods from splines"}
+## table of best clustering types 
+tab_best_order <- data.frame(
+  Best_cluster_types = c(best_order[1:6])
+)
+
+kable(tab_best_order)
+```
+
+```{r, fig.cap= "Bar plot of player data aross the different clusters from splines"}
+# Visualizing results 
+pp <- apply(clustdm_cv[, c(2, 3, 5, 6)], 2, function(x) tapply(x, clustdm_cv$X6_manhattan, mean, na.rm = TRUE))
+barplot(t(pp), beside = TRUE, ylab = "Standardized Statistic (C1,C2, C1P, C2P)", xlab = "Player Type")
+```
+
+```{r, fig.cap= "Polynomials from the different clusters from splines"}
+# Final polynomial-based visualization for sanity check
+out <- lm(ratr ~ -1 + factor(X6_manhattan) + factor(X6_manhattan) / ages + factor(X6_manhattan) / I(ages^2), 
+          data = MPO_ar_pt)
+summary(out)
+
+ages_plot <- seq(-1, 1, 0.1)
+ages_plot2 <- ages_plot * sd(MPO_ar_pt$Age, na.rm = TRUE) + mean(MPO_ar_pt$Age, na.rm = TRUE)
+
+rat_pred1 <- coef(out)[1] + coef(out)[5] * ages_plot + coef(out)[9]  * ages_plot^2
+rat_pred2 <- coef(out)[2] + coef(out)[6] * ages_plot + coef(out)[10] * ages_plot^2
+rat_pred3 <- coef(out)[3] + coef(out)[7] * ages_plot + coef(out)[11] * ages_plot^2
+rat_pred4 <- coef(out)[4] + coef(out)[8] * ages_plot + coef(out)[12] * ages_plot^2
+
+plot(rat_pred1 ~ ages_plot2, type = "l", lwd = 2, col = "black",
+     ylim = c(min(rat_pred1, rat_pred2, rat_pred3, rat_pred4),
+              max(rat_pred1, rat_pred2, rat_pred3, rat_pred4)),
+     ylab = "Predicted Rating", xlab = "Age",
+     main = "Polynomial Aging Curves by Player Type (X6_manhattan)")
+lines(rat_pred2 ~ ages_plot2, col = "blue", lwd = 2)
+lines(rat_pred3 ~ ages_plot2, col = "red", lwd = 2)
+lines(rat_pred4 ~ ages_plot2, col = "darkgreen", lwd = 2)
+
+```
+
+These are a couple visualizations of of scatter plots of all the players.
+
+```{r, fig.cap= "Scatter plot of all players"}
+## scatter plot with different color points to show 
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr)) +
+  geom_point(alpha = 0.3) +
+  labs(title = "All Players' Ratings by Age",
+       x = "Age", y = "Player Rating") +
+  theme_minimal()
+```
+
+```{r, fig.cap= "Seperated by color using clustering method"}
+# with color
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr, color = as.factor(`X6_manhattan`))) +
+  geom_point(alpha = 0.4) +
+  labs(title = "Ratings by Age and Player Type",
+       x = "Age", y = "Player Rating", color = "Player Type") +
+  theme_minimal()
+```
+
+```{r, fig.cap= "Different groups shown as individual graphs"}
+# using facet wrap 
+ggplot(MPO_ar_pt, aes(x = Age, y = ratr, color = as.factor(`X6_manhattan`))) +
+  geom_point(alpha = 0.4) + 
+  facet_wrap(~`X6_manhattan`) +
+  labs(title = "Ratings by Age and Player Type",
+       x = "Age", y = "Player Rating", color = "Player Type") +
+  theme_minimal()
+```
+
+This is a representation of all the different clustering methods used and their effectiveness. 
+
+```{r, warning=FALSE, fig.cap= "Bar plot of all clustering types and their RMSE"}
+#performance by cluster on bar plots (MSE measure) 
+mean_SS_t$Cluster <- colnames(cbind(clss, clss_sc, clss_hc, clss_kmeans))
+ggplot(mean_SS_t, aes(x = reorder(Cluster, Mean_MSE_PlayerType), y = Mean_MSE_PlayerType)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "RMSE of Player-Type Models by Clustering Method",
+       x = "Clustering Variable", y = "RMSE (Player-Type)") +
+  theme_minimal()
+```
+
+# Discussion 
+
+Looking at our results holistically is how we can interpret the full scope of our research. When looking at the table of results for the quadratic model, We can interpret the performance of the player type versus the non player type. When solely looking at the MSE's of both, we can see that the player type model performed slightly better more often than the non player type. The player type (pt) had an MSE of around 26-27 every time, while the non player type (npt) had 27 or above. In retrospect we would still want the MSE in general to be lower, as on average this means that it was missing the true rating by around 26 points every time regardless. 
+
+In terms of the spline models, it had different performance. The MSE was around 24-27 for the pt, while the npt was all over the place, being in the 1300s. Based off that it would be a safe conclusion to say that when using splines for aging curves, it makes more sense to use pt models rather than not. 
+
+When looking at the bar plot of the clusters and the line plot of the aging curve of different clusters, there is clear differences that are drawn between players. For the bar plot the first group is the super stars, the second is the middle of the way players, and the third are the fringe lesser players. We can then see exactly why the players were split up in the way that they were. As opposed to the ones of the spline model, it is harder to interpret the six different groups that everything was split up by. The bar graph follows the quadratic model mostly, having good, middle of the way, and bad players grouped together. But then with cluster 4 it has a large mix of both, which is questionable. As well as with the aging curve plot, that shows the 4 splines that was fit. It seems as if it has 3 very closely contested groups, and then a very poor quickly decaying group. 
+
+The scatter plots that are a representation of all players give us a good insight as well. It shows the color corresponding to the group that the player belongs to. The quadratic model gives us a nicer representation of everything encompassing compared to the the spline model. You can clearly see where the difference between the groups of players are and how the aging curve line from our plots before exists. 
+
+Despite the extent of the research , some limitations and inconsistencies are present. Player ratings are influenced by many different external factors that were not captured in this data. Further more, players may transition their play style and skill patterns as they age, as they improve, and as the game changes. Some of the results from our spline models lacked aspects of interpreting, which may allude to over fitting.  As far as real world context, research like this can be used by coaches, sponsors, and scouts and analysts to find high profile players easier. This could also help chart a players decline over their career and help guide their career as it declines. 
+
+# Conclusion 
+
+This project set out to compare the effectiveness of modeling the aging curves through the sport of disc golf and their ratings of players. By fittitng both a quadratic model and a spline model across multiple different clustering strategies, we found that player type models edged out non player type model in terms of predictive error. The results suggest that athlete aging patterns are meaningful across different aging groups. 
+
+There is a strong potential for this type of modeling to be ued in other sports. It would be better utilized for individual performance based sports, like tennis, golf, and e sports. The approach of using clustering to define roles, followed by role specific modeling, could be space for expansion as well. 
+
+If this research was to be continued the first avenue that would be explored is the change in rating over time. Use of something like this would allow more dynamic modeling rating as a function of age alone. It might uncover transition patterns between roles when a player's performances changes because of injury, age, or improvement. 
+
+
